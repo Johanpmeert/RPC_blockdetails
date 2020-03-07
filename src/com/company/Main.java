@@ -17,7 +17,7 @@ import org.bouncycastle.util.encoders.Hex;
 public class Main {
     public static void main(String[] args) {
         System.out.println("Demo how to extract a specific transaction from a Bitcoin block");
-        System.out.println("Using library: javabitcoindrpcclient");
+        System.out.println();
         System.out.print("Initialising ... ");
         final String protocol = "http";
         // On your bitcoin node (bitcoind or bitcoin-QT), check that bitcoin.conf contains:
@@ -47,8 +47,13 @@ public class Main {
         BitcoinJSONRPCClient bitcoinClient = new BitcoinJSONRPCClient(rpcurl);
         stoptime = System.nanoTime();
         System.out.println(" done, that took " + (stoptime - startime) / 1e9 + " seconds");
-        System.out.println("Total Bitcoin block count reported by node = " + bitcoinClient.getBlockCount());
-        System.out.println("Wallet balance of your node = "+bitcoinClient.getBalance());
+        System.out.println();
+        System.out.println("General Blockchain & node information:");
+        System.out.println("\tYour node is connected to "+bitcoinClient.getConnectionCount()+" other nodes");
+        System.out.println("\tYour node is version is "+bitcoinClient.getNetworkInfo().subversion());
+        System.out.println("\tBitcoin mining difficulty: "+bitcoinClient.getBlockChainInfo().difficulty());
+        System.out.println("\tTotal Bitcoin block count reported by node = " + bitcoinClient.getBlockCount());
+        System.out.println("\tWallet balance of your node = " + bitcoinClient.getBalance());
         System.out.println();
         BitcoindRpcClient.Block BTCblock;
         int getblock;
@@ -59,7 +64,7 @@ public class Main {
                 getblock = in.nextInt();
             }
             while (getblock < 0 || getblock > bitcoinClient.getBlockCount());
-            if (getblock==0) return;
+            if (getblock == 0) return;
             System.out.print("Getting block " + getblock + " from Blockchain...");
             // First get block
             startime = System.nanoTime();
@@ -78,8 +83,9 @@ public class Main {
                     Scanner in = new Scanner(System.in);
                     transaction = in.nextInt();
                 }
-                while (transaction < 0 || transaction > aantaltrans);
+                while (transaction < 0 || transaction > aantaltrans-1);
             }
+            startime = System.nanoTime();
             System.out.print("\tGetting Tx " + transaction + " from block " + getblock + " from Blockchain...");
             BitcoindRpcClient.RawTransaction testraw, testraw2;
             startime = System.nanoTime();
@@ -94,7 +100,7 @@ public class Main {
                 System.out.print(" BTC were awarded to address ");
                 if (checktype.equals("pubkey")) {
                     // we only have scriptPubKey to work with ... assuming P2PK (Pay to Public key)
-                    // so take the hex JSON, take off first byte (=length), take off last byte (=ac OP_CHECKSIG)
+                    // so take the "hex" JSON, take off first byte (=coded length), take off last byte (byte "ac" = OP_CHECKSIG)
                     String hexstring = testraw.vOut().get(0).scriptPubKey().hex();
                     String hexstringfinal = hexstring.substring(2, hexstring.length() - 2);
                     System.out.println(PubkeyhexstringTobtcaddress(hexstringfinal));
@@ -125,29 +131,31 @@ public class Main {
                         // same here as with tx0, pubkey translation needed because no address field ...
                         String hexstring = testraw2.vOut().get(0).scriptPubKey().hex();
                         String hexstringfinal = hexstring.substring(2, hexstring.length() - 2);
-                        System.out.println(" BTC came from address " +PubkeyhexstringTobtcaddress(hexstringfinal));
-                    }
-                    else System.out.println(" BTC came from address " + testraw2.vOut().get(voutweneed).scriptPubKey().addresses().toString());
+                        System.out.println(" BTC came from address " + PubkeyhexstringTobtcaddress(hexstringfinal));
+                    } else
+                        System.out.println(" BTC came from address " + testraw2.vOut().get(voutweneed).scriptPubKey().addresses().toString());
                 }
                 System.out.printf("\tFee was %.8f", totalvin - totalvout);
                 System.out.println(" BTC; " + totalvin + " - " + totalvout);
             }
+            stoptime = System.nanoTime();
+            System.out.println("\tDone, that took " + (stoptime - startime) / 1e9 + " seconds");
             System.out.println();
         }
         while (true);
     }
 
     public static String PubkeyhexstringTobtcaddress(String pubkey) {
-        // we get Public Key, we translate to Address, so:
+        // we get Public Key as a hex String, to translate to readable BTC Address, we need to:
         // first ripemd160(sha-256(Public Key))
         // then add byte 00 in front
         // calculate sha256(sha256(the value with the 00 in front)), take first 4 bytes
         // make final string 00 + ripemd(160(sha256(Public Key)) + 4 bytes
         // Convertbase58 of this string == bitcoin address
         byte[] sha = Hex.decode(pubkey);
-        // byte[] shadone = Sha256Hash.hash(sha);
+        // byte[] shadone = Sha256Hash.hash(sha); // not really needed
         // System.out.println("\t\t\tSHA256 = " +HexCoder.encode(shadone));
-        byte[] ripemd160done = sha256hash160(sha);
+        byte[] ripemd160done = sha256hash160(sha);  // does the ripemd160 en sha256 in one go
         String addnull = "00" + HexCoder.encode(ripemd160done);
         // System.out.println("\t\t\t00 + ripemd160(sha256)) = "+addnull);
         byte[] shatwice = Sha256Hash.hashTwice(Hex.decode(addnull));
