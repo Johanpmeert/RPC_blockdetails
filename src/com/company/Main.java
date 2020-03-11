@@ -50,7 +50,7 @@ public class Main {
         System.out.println();
         System.out.println("General Blockchain & node information:");
         System.out.println("\tYour node is connected to "+bitcoinClient.getConnectionCount()+" other nodes");
-        System.out.println("\tYour node is version is "+bitcoinClient.getNetworkInfo().subversion());
+        System.out.println("\tYour node version is "+bitcoinClient.getNetworkInfo().subversion());
         System.out.println("\tBitcoin mining difficulty: "+bitcoinClient.getBlockChainInfo().difficulty());
         System.out.println("\tTotal Bitcoin block count reported by node = " + bitcoinClient.getBlockCount());
         System.out.println("\tWallet balance of your node = " + bitcoinClient.getBalance());
@@ -94,7 +94,7 @@ public class Main {
             System.out.println(" done, that took " + (stoptime - startime) / 1e9 + " seconds");
             if (transaction == 0) {
                 // System.out.println("Complete = "+testraw);
-                // System.out.println("\tFull tx = "+testraw.vOut().get(0));
+                System.out.println("\tFull tx = "+testraw.vOut().get(0));
                 String checktype = testraw.vOut().get(0).scriptPubKey().type();
                 System.out.print("\tThis is a Coinbase (mining) transaction of type " + checktype + ", " + testraw.vOut().get(0).value().toString());
                 System.out.print(" BTC were awarded to address ");
@@ -116,7 +116,14 @@ public class Main {
                 for (int teller = 0; teller < numberofvout; teller++) {
                     totalvout += testraw.vOut().get(teller).value().doubleValue();
                     System.out.print("\t\tVout value " + teller + ": " + testraw.vOut().get(teller).value().toString());
-                    System.out.println(" BTC sent to address " + testraw.vOut().get(teller).scriptPubKey().addresses().toString());
+                    if (testraw.vOut().get(teller).scriptPubKey().type().equals("pubkey")) {
+                        String hexstring = testraw.vOut().get(teller).scriptPubKey().hex();
+                        String hexstringfinal = hexstring.substring(2,hexstring.length()-2);
+                        System.out.println(" BTC sent to address " + PubkeyhexstringTobtcaddress(hexstringfinal));
+                    }
+                    else {
+                        System.out.println(" BTC sent to address " + testraw.vOut().get(teller).scriptPubKey().addresses().toString());
+                    }
                 }
                 int numberofvin = testraw.vIn().size();
                 System.out.println("\tThere (is)are " + numberofvin + " Vin(s) in this transaction:");
@@ -129,7 +136,7 @@ public class Main {
                     System.out.print(testraw2.vOut().get(voutweneed).value().toString());
                     if (testraw2.vOut().get(voutweneed).scriptPubKey().type().equals("pubkey")) {
                         // same here as with tx0, pubkey translation needed because no address field ...
-                        String hexstring = testraw2.vOut().get(0).scriptPubKey().hex();
+                        String hexstring = testraw2.vOut().get(voutweneed).scriptPubKey().hex(); // bug fixed!
                         String hexstringfinal = hexstring.substring(2, hexstring.length() - 2);
                         System.out.println(" BTC came from address " + PubkeyhexstringTobtcaddress(hexstringfinal));
                     } else
