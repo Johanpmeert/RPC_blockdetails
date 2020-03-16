@@ -1,13 +1,17 @@
 package com.company;
 
+import com.google.gson.Gson;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 import wf.bitcoin.krotjson.HexCoder;
 import org.bitcoinj.core.Base58;
 import org.bitcoinj.core.Sha256Hash;
 
+import static java.lang.Character.isUpperCase;
+import static java.lang.Character.isWhitespace;
 import static org.bitcoinj.core.Utils.sha256hash160;
 
+import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Scanner;
@@ -49,9 +53,9 @@ public class Main {
         System.out.println(" done, that took " + (stoptime - startime) / 1e9 + " seconds");
         System.out.println();
         System.out.println("General Blockchain & node information:");
-        System.out.println("\tYour node is connected to "+bitcoinClient.getConnectionCount()+" other nodes");
-        System.out.println("\tYour node version is "+bitcoinClient.getNetworkInfo().subversion());
-        System.out.println("\tBitcoin mining difficulty: "+bitcoinClient.getBlockChainInfo().difficulty());
+        System.out.println("\tYour node is connected to " + bitcoinClient.getConnectionCount() + " other nodes");
+        System.out.println("\tYour node version is " + bitcoinClient.getNetworkInfo().subversion());
+        System.out.println("\tBitcoin mining difficulty: " + bitcoinClient.getBlockChainInfo().difficulty());
         System.out.println("\tTotal Bitcoin block count reported by node = " + bitcoinClient.getBlockCount());
         System.out.println("\tWallet balance of your node = " + bitcoinClient.getBalance());
         System.out.println();
@@ -83,7 +87,7 @@ public class Main {
                     Scanner in = new Scanner(System.in);
                     transaction = in.nextInt();
                 }
-                while (transaction < 0 || transaction > aantaltrans-1);
+                while (transaction < 0 || transaction > aantaltrans - 1);
             }
             startime = System.nanoTime();
             System.out.print("\tGetting Tx " + transaction + " from block " + getblock + " from Blockchain...");
@@ -93,21 +97,19 @@ public class Main {
             stoptime = System.nanoTime();
             System.out.println(" done, that took " + (stoptime - startime) / 1e9 + " seconds");
             if (transaction == 0) {
-                // System.out.println("Complete = "+testraw);
-                System.out.println("\tFull tx = "+testraw.vOut().get(0));
-                String checktype = testraw.vOut().get(0).scriptPubKey().type();
-                System.out.print("\tThis is a Coinbase (mining) transaction of type " + checktype + ", " + testraw.vOut().get(0).value().toString());
-                System.out.print(" BTC were awarded to address ");
-                if (checktype.equals("pubkey")) {
-                    // we only have scriptPubKey to work with ... assuming P2PK (Pay to Public key)
-                    // so take the "hex" JSON, take off first byte (=coded length), take off last byte (byte "ac" = OP_CHECKSIG)
-                    String hexstring = testraw.vOut().get(0).scriptPubKey().hex();
-                    String hexstringfinal = hexstring.substring(2, hexstring.length() - 2);
-                    System.out.println(PubkeyhexstringTobtcaddress(hexstringfinal));
-                } else if (checktype.equals("scripthash") || checktype.equals("pubkeyhash")) {
-                    // easy: address is in the Tx 0 JSON, so just get that and be done
-                    System.out.println(testraw.vOut().get(0).scriptPubKey().addresses());
+                // System.out.println("Complete = "+testraw.vout());
+                int numberofcoinbaseaddr = testraw.vOut().size();
+                BigDecimal totalvalue = BigDecimal.ZERO;
+                System.out.println("\tThis is a Coinbase (mining) transaction with " + numberofcoinbaseaddr + " outputs:");
+                for (int teller = 0; teller < numberofcoinbaseaddr; teller++) {
+                    String checktype = testraw.vOut().get(teller).scriptPubKey().type();
+                    System.out.print("\t\t(" + testraw.vOut().get(teller).scriptPubKey().type() + ") ");
+                    totalvalue = totalvalue.add(testraw.vOut().get(teller).value());
+                    System.out.print(testraw.vOut().get(teller).value() + " BTC goes to address ");
+                    System.out.println(VoutAddressParser(testraw.vOut().get(teller).scriptPubKey()));
+                    // System.out.println(testraw.vOut().get(teller).scriptPubKey().asm());
                 }
+                System.out.println("\t\tTotal value = " + totalvalue + " BTC");
             } else {
                 double totalvin = 0.0;
                 double totalvout = 0.0;
@@ -115,15 +117,10 @@ public class Main {
                 System.out.println("\tThere (is)are " + numberofvout + " Vout(s) in this transaction:");
                 for (int teller = 0; teller < numberofvout; teller++) {
                     totalvout += testraw.vOut().get(teller).value().doubleValue();
-                    System.out.print("\t\tVout value " + teller + ": " + testraw.vOut().get(teller).value().toString());
-                    if (testraw.vOut().get(teller).scriptPubKey().type().equals("pubkey")) {
-                        String hexstring = testraw.vOut().get(teller).scriptPubKey().hex();
-                        String hexstringfinal = hexstring.substring(2,hexstring.length()-2);
-                        System.out.println(" BTC sent to address " + PubkeyhexstringTobtcaddress(hexstringfinal));
-                    }
-                    else {
-                        System.out.println(" BTC sent to address " + testraw.vOut().get(teller).scriptPubKey().addresses().toString());
-                    }
+                    System.out.print("\t\t(" + testraw.vOut().get(teller).scriptPubKey().type() + ") ");
+                    System.out.print("Vout value " + teller + ": " + testraw.vOut().get(teller).value().toString());
+                    System.out.println(" BTC sent to address " + VoutAddressParser(testraw.vOut().get(teller).scriptPubKey()));
+                    // System.out.println(testraw.vOut().get(teller).scriptPubKey().asm());
                 }
                 int numberofvin = testraw.vIn().size();
                 System.out.println("\tThere (is)are " + numberofvin + " Vin(s) in this transaction:");
@@ -133,14 +130,21 @@ public class Main {
                     System.out.print(testraw.vIn().get(teller).txid() + " so ");
                     testraw2 = bitcoinClient.getRawTransaction(testraw.vIn().get(teller).txid());
                     totalvin += testraw2.vOut().get(voutweneed).value().doubleValue();
+                    System.out.print(" (" + testraw2.vOut().get(voutweneed).scriptPubKey().type() + ") ");
                     System.out.print(testraw2.vOut().get(voutweneed).value().toString());
-                    if (testraw2.vOut().get(voutweneed).scriptPubKey().type().equals("pubkey")) {
-                        // same here as with tx0, pubkey translation needed because no address field ...
-                        String hexstring = testraw2.vOut().get(voutweneed).scriptPubKey().hex(); // bug fixed!
+                    if (testraw2.vOut().get(voutweneed).scriptPubKey().addresses() != null) {  // easy address exists so we use it
+                        System.out.println(" BTC came from address " + testraw2.vOut().get(voutweneed).scriptPubKey().addresses().toString());
+                    } else if (testraw2.vOut().get(voutweneed).scriptPubKey().type().equals("pubkey")) {
+                        String hexstring = testraw2.vOut().get(voutweneed).scriptPubKey().hex();
                         String hexstringfinal = hexstring.substring(2, hexstring.length() - 2);
                         System.out.println(" BTC came from address " + PubkeyhexstringTobtcaddress(hexstringfinal));
-                    } else
-                        System.out.println(" BTC came from address " + testraw2.vOut().get(voutweneed).scriptPubKey().addresses().toString());
+                    } else if ((testraw2.vOut().get(voutweneed).scriptPubKey().asm().contains("OP_DUP OP_HASH160")) || (testraw2.vOut().get(voutweneed).scriptPubKey().asm().contains("OP_EQUALVERIFY OP_CHECKSIG OP_NOP"))) {
+                        String hexstring = testraw2.vOut().get(voutweneed).scriptPubKey().hex();
+                        String hexstringfinal = hexstring.substring(6, hexstring.length() - 6);
+                        System.out.println(" BTC came from address " + PubkeyhexstringTobtcaddress(hexstringfinal));
+                    } else {
+                        System.out.println(" Illegal ...");
+                    }
                 }
                 System.out.printf("\tFee was %.8f", totalvin - totalvout);
                 System.out.println(" BTC; " + totalvin + " - " + totalvout);
@@ -150,6 +154,36 @@ public class Main {
             System.out.println();
         }
         while (true);
+    }
+
+    public static String VoutAddressParser(BitcoindRpcClient.RawTransaction.Out.ScriptPubKey script) {
+        if (script.addresses() != null) {
+            return script.addresses().toString();
+        } else if (script.type().equals("pubkey")) {
+            String hexstring = script.hex();
+            String hexstring2 = hexstring.substring(2, hexstring.length() - 2); // take out OP_CODE: 1 in front and 1 in back
+            return PubkeyhexstringTobtcaddress(hexstring2);
+        } else {
+            return PubkeyhexstringTobtcaddress(AsmCrawler(script.asm().toString()));
+        }
+    }
+
+    public static String AsmCrawler(String asm) {
+        String truncated = asm;
+        int place;
+        int space;
+        do {
+            place = truncated.indexOf("OP");
+            if (place == 0) {
+                space = truncated.indexOf(" ");
+                truncated = truncated.substring(space + 1, truncated.length() - 1);
+            }
+        } while (place == 0);
+        space = truncated.indexOf(" ");
+        if (space==-1) return truncated;
+        truncated = truncated.substring(0, space);
+        if (truncated.equals("0")) truncated="00";
+        return truncated;
     }
 
     public static String PubkeyhexstringTobtcaddress(String pubkey) {
